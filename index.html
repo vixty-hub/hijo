@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blitz and Chips: Las notas</title>
+<style>
+body{margin:0;background:#14121f;color:#f2efe6;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+canvas{max-width:100%;height:auto;border:3px solid #6c5ce7;margin-top:12px;background:#000}
+p{font-size:13px;opacity:.8;margin:8px}
+</style></head><body>
+<canvas id="g" width="640" height="400"></canvas>
+<p>Flechas / WASD: moverte · E: interactuar · Espacio: avanzar diálogo</p>
+<script>
+const c=document.getElementById('g'),x=c.getContext('2d'),W=640,H=400,TS=30;
+const K={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();K[k]=1;if(k.startsWith('arrow')||k===' ')e.preventDefault();act(k)});
+addEventListener('keyup',e=>K[e.key.toLowerCase()]=0);
+let S='title',ph=0,P={x:300,y:250,w:14,h:14},dlg=[],cb=null,T='17:55',clues=0,read=0,rested=0,frames=0,voiceT=0,voiceTxt='',voiceVol=0,found=0,G=[],son={x:0,y:0},msg='';
+const say=(l,f)=>{dlg=l.slice();cb=f||null};
+const ov=(a,b)=>a.x<b[0]+b[2]&&a.x+a.w>b[0]&&a.y<b[1]+b[3]&&a.y+a.h>b[1];
+const walls={room:[[0,0,640,40],[0,360,640,40],[0,0,40,400],[600,0,40,160],[600,240,40,160],[60,60,120,70],[420,50,150,60]],
+ arcade:()=>[[0,0,640,20],[0,380,640,20],[0,0,20,400],[620,0,20,170],[620,240,20,160],[120,60,50,40],[200,60,50,40],[280,60,50,40],[360,60,50,40],[440,60,50,40],[280,200,50,40]].concat(ph>=2?[[30,230,90,70]]:[])};
+
+/* ---------- ITEMS ---------- */
+const items=[
+ {s:'room',ph:0,r:[420,50,150,60],fn(){read?say(['Padre: Todo aprobado... Sigue sin parecerme normal.']):say(['(Coges el boletín del segundo trimestre)','Padre: Matemáticas, aprobado. Lengua, aprobado... ¡TODO aprobado!','Padre: ¡Esto es rarísimo! ¡Mi hijo nunca ha aprobado todo!','Hijo: ¡Te lo dije, papá! He estudiado mucho.','Padre: Hay que celebrarlo. ¡Nos vamos a Blitz and Chips!'],()=>read=1)}},
+ {s:'room',ph:0,r:[596,160,24,80],fn(){read?say(['Hijo: ¡Vamos, papá! (Parece nervioso...)','Padre: ¡Al arcade más famoso, el de Rick y Morty!'],goArcade):say(['Padre: Antes voy a leer esas notas.'])}},
+ {s:'arcade',ph:0,r:[30,20,70,40],fn(){vis(0,'Padre: El baño... vacío. Solo un grifo que gotea.')}},
+ {s:'arcade',ph:0,r:[200,60,50,40],fn(){vis(1,'Padre: Un vaso de refresco a medias... y una ficha. Hijo estuvo aquí.')}},
+ {s:'arcade',ph:0,r:[280,200,50,40],fn(){vis(2,'Padre: Nada por aquí... pero oigo risitas lejanas. ¿Del laberinto?')}},
+ {s:'arcade',ph:0,r:[600,170,30,70],fn(){clues>=3?say(['Padre: Esas voces vienen del laberinto. ¡Entro!'],goMaze):say(['Padre: Es la puerta del laberinto. Antes busco por el arcade.'])}},
+ {s:'arcade',ph:2,r:[280,300,90,24],fn(){rested?say(['Padre: Ya estoy mejor. Voy a por una bebida.']):say(['(Te sientas en el banco, sin aliento)','Padre: Uf... corriendo detrás de ese crío... ya no tengo 20 años.','Padre: Bueno, me voy a por algo de beber.'],()=>rested=1)}},
+ {s:'arcade',ph:2,r:[30,230,90,70],fn(){rested?say(['Padre: Una cola, por favor...','Trabajador: Claro, señor... (te suena esa voz...)','Padre: ¡¡UN MOMENTO!! ¡¡ERES MI HIJO!!','Hijo: ¡Ay, no! ¡Papá! ¡Me he colado en la zona de trabajadores para coger el uniforme!','(Lo agarras de la oreja... digo, de la mano, y te lo llevas al coche)'],goCar):say(['Padre: Primero descanso un poco en el banco.'])}}
+];
+const vis=(i,t)=>{if(!vis.d)vis.d={};if(!vis.d[i]){vis.d[i]=1;clues++}say([t])};
+const near=r=>ov({x:P.x-18,y:P.y-18,w:P.w+36,h:P.h+36},r);
+
+/* ---------- FLOW ---------- */
+function start(){S='room';P.x=300;P.y=250;say(['Es un sábado por la tarde. Estás en la habitación de tu hijo mayor, el peor estudiante de la familia.','Sobre el escritorio están las notas del segundo trimestre. (Acércate al escritorio y pulsa E)'])}
+function goArcade(){S='arcade';P.x=310;P.y=340;T='17:58';
+ say(['Hijo: ¡Papá, mira cuántas máquinas! ¡Esto es increíble!','Padre: Te lo has ganado, campeón.','Hijo: Esto... papá... necesito ir al baño. Ahora vuelvo. (Sale corriendo, nervioso)','Padre: Mientras tanto miro las máquinas.','(18:00 — BZZZ. El móvil vibra. Gmail: "Notas definitivas 2.º trimestre")','Padre: "Suspensos: 7"... ¡¡SIETE SUSPENSOS!! ¡¡Me ha engañado!!','Padre: No estaba en el baño. ¡Se esconde en el arcade! ¡A buscarlo!','(Busca: baño, máquinas... pulsa E junto a las cosas. Necesitas 3 pistas.)'],()=>T='18:00')}
+function genMaze(){G=[];for(let r=0;r<13;r++)G.push(Array(21).fill(1));
+ const st=[[1,1]];G[1][1]=0;
+ while(st.length){const[cx,cy]=st[st.length-1];const n=[[2,0],[-2,0],[0,2],[0,-2]].filter(([a,b])=>{const X=cx+a,Y=cy+b;return X>0&&X<20&&Y>0&&Y<12&&G[Y][X]});
+  if(!n.length){st.pop();continue}const[a,b]=n[Math.random()*n.length|0];G[cy+b/2][cx+a/2]=0;G[cy+b][cx+a]=0;st.push([cx+a,cy+b])}
+ let cand=[];for(let r=1;r<13;r+=2)for(let q=1;q<21;q+=2)if(q+r>=10)cand.push([q,r]);
+ const[sq,sr]=cand[Math.random()*cand.length|0];son.x=sq*TS+8;son.y=sr*TS+8}
+function goMaze(){S='maze';ph=1;genMaze();found=0;frames=0;P.x=TS+8;P.y=TS+8;T='18:05';msg='Sigue la voz de tu hijo...'}
+function goCar(){S='car';ph=3;T='19:10';
+ say(['(En el coche)','Padre: ¡¡SIETE SUSPENSOS!! ¡¡Y encima me mientes con el boletín!!','Padre: ¡Te escondes, te cuelas en la zona de trabajadores, te robas un uniforme!','Padre: ¡Un mes sin consola, sin móvil y sin Blitz and Chips!','Hijo: Pero papá...','Padre: ¡¡NI PAPÁ NI NADA!! ¡Y a estudiar desde mañana mismo!','(La bronca del siglo duró hasta que llegasteis a casa.)'],()=>S='end')}
+
+/* ---------- INPUT / UPDATE ---------- */
+function act(k){
+ if(S==='title'&&(k==='enter'||k===' '))return start();
+ if(S==='end'&&k==='r')return location.reload();
+ if(dlg.length){if(k===' '||k==='enter'){dlg.shift();if(!dlg.length&&cb){const f=cb;cb=null;f()}}return}
+ if(k==='e'||k===' '){const it=items.find(i=>i.s===S&&i.ph===ph&&near(i.r));if(it)it.fn()}}
+function blocked(r){
+ if(S==='maze'){for(const[px,py]of[[r.x,r.y],[r.x+r.w,r.y],[r.x,r.y+r.h],[r.x+r.w,r.y+r.h]])if(G[Math.floor(py/TS)]?.[Math.floor(px/TS)]!==0)return 1;return 0}
+ const w=typeof walls[S]==='function'?walls[S]():walls[S]||[];return w.some(b=>ov(r,b))}
+function update(){
+ if(['title','end','car'].includes(S)||dlg.length)return;
+ frames++;
+ const dx=(K.arrowright||K.d?1:0)-(K.arrowleft||K.a?1:0),dy=(K.arrowdown||K.s?1:0)-(K.arrowup||K.w?1:0),sp=2.4;
+ let n={...P,x:P.x+dx*sp};if(!blocked(n))P.x=n.x;n={...P,y:P.y+dy*sp};if(!blocked(n))P.y=n.y;
+ if(S==='maze')mazeLogic()}
+function mazeLogic(){
+ const d=Math.hypot(P.x-son.x,P.y-son.y);
+ if(!found){voiceVol=Math.max(0,1-d/380);
+  if(--voiceT<=0){voiceT=95;const ph_=['¡Papá, no me busques!','¡Estoy por aquí!','¡No te enfades, porfa!','Jeje... ¡no me pillas!'];voiceTxt=ph_[Math.random()*4|0];
+   try{const u=new SpeechSynthesisUtterance(voiceTxt);u.lang='es-ES';u.pitch=1.9;u.volume=voiceVol;if(voiceVol>0.03)speechSynthesis.speak(u)}catch(e){}}
+  if(d<24){found=1;say(['Padre: ¡¡TE TENGO!!','Hijo: ¡¡Papá, no!! ¡Déjame explicarte!','(Se zafa y sale corriendo hacia la salida)','Padre: ¡Vuelve aquí! ¡Sigue la salida verde!'],()=>msg='¡Sal del laberinto! (casilla verde)')}}
+ else if(P.x<TS*2&&P.y<TS*2){S='arcade';ph=2;P.x=585;P.y=200;T='18:31';
+  say(['(Sales del laberinto, sudando y sin aliento)','Padre: Ese... crío... corre... más que yo.','(Busca el banco para sentarte. Pulsa E)'])}}
+
+/* ---------- DRAW ---------- */
+const E=(t,px,py,s=22)=>{x.font=s+'px serif';x.textBaseline='top';x.fillText(t,px,py)};
+const R=(c_,r)=>{x.fillStyle=c_;x.fillRect(...r)};
+function draw(){
+ x.clearRect(0,0,W,H);
+ if(S==='title'){R('#14121f',[0,0,W,H]);x.fillStyle='#ffd34d';x.font='bold 34px monospace';x.textAlign='center';x.fillText('BLITZ AND CHIPS',W/2,110);x.fillStyle='#fff';x.font='20px monospace';x.fillText('Las notas del segundo trimestre',W/2,160);x.font='16px monospace';x.fillText('Pulsa ENTER para empezar',W/2,260);x.textAlign='left';return}
+ if(S==='room')drawRoom();else if(S==='arcade')drawArcade();else if(S==='maze')drawMaze();
+ else{R('#0b0b12',[0,0,W,H]);x.fillStyle='#fff';E('🚗',W/2-30,120,60);
+  if(S==='end'){x.textAlign='center';x.font='bold 30px monospace';x.fillText('FIN',W/2,230);x.font='15px monospace';x.fillText('Tardaste '+Math.round(frames/60)+' s en encontrar a tu hijo en el laberinto.',W/2,280);x.fillText('Pulsa R para jugar otra vez (el laberinto cambia siempre)',W/2,310);x.textAlign='left'}}
+ if(S==='room'||S==='arcade'||S==='maze'){E('👨',P.x-4,P.y-6,22)}
+ if(S!=='title'&&S!=='end'){x.fillStyle='#fff';x.font='14px monospace';x.fillText('🕒 '+T,W-90,6)}
+ if(dlg.length)drawDlg()}
+function drawRoom(){R('#2d2a4a',[0,0,W,H]);R('#3c3866',[40,40,560,320]);R('#5b8def',[60,60,120,70]);E('🛏️',100,70,40);R('#8b5a2b',[420,50,150,60]);E('📄',470,55,30);x.fillStyle='#fff';x.font='11px monospace';x.fillText('NOTAS',470,92);R('#c9a227',[596,160,12,80]);x.fillText('PUERTA',560,200)}
+function drawArcade(){R('#1a1033',[0,0,W,H]);for(let i=0;i<32;i++)for(let j=0;j<20;j++)if((i+j)%2)R('#241548',[i*20,j*20,20,20]);
+ R('#4b2fb0',[0,0,W,20]);R('#2f8f6b',[30,20,70,40]);x.fillStyle='#fff';x.font='bold 14px monospace';x.fillText('WC',52,32);
+ for(const m of walls.arcade().slice(5,11)){R('#8e44ad',m);R('#00e5ff',[m[0]+6,m[1]+5,m[2]-12,16]);E('🕹️',m[0]+14,m[1]+22,16)}
+ R('#c9a227',[610,170,10,70]);x.fillStyle='#fff';x.font='11px monospace';x.fillText('LABERINTO',560,172);
+ if(ph===2){R('#8b5a2b',[280,300,90,24]);x.fillStyle='#fff';x.fillText('BANCO',305,307);R('#d63031',[30,230,90,70]);x.fillStyle='#fff';x.fillText('🥤 BEBIDAS',36,236);
+  if(rested){E('🧑',60,255,26);E('🧢',62,238,16)}}}
+function drawMaze(){R('#000',[0,0,W,H]);
+ for(let r=0;r<13;r++)for(let q=0;q<21;q++)R(G[r][q]?'#4a3a8a':'#1b1630',[q*TS,r*TS,TS,TS]);
+ R('#27ae60',[TS,TS,TS,TS]);
+ if(!found)E('👦',son.x-4,son.y-6,22);
+ const g=x.createRadialGradient(P.x+7,P.y+7,10,P.x+7,P.y+7,130);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.98)');x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.fillStyle='#fff';x.font='13px monospace';x.fillText(msg,10,6);
+ if(!found){x.fillText('🔊',10,H-26);R('#333',[34,H-24,120,10]);R('#ffd34d',[34,H-24,120*voiceVol,10]);
+  x.globalAlpha=Math.min(1,voiceVol*1.6);x.font='bold 16px monospace';x.fillStyle='#ffd34d';x.fillText('"'+voiceTxt+'"',170,H-26);x.globalAlpha=1}}
+function wrap(t,w){const o=[];let l='';for(const s of t.split(' ')){if(x.measureText(l+s).width>w){o.push(l);l=''}l+=s+' '}o.push(l);return o}
+function drawDlg(){R('rgba(0,0,0,.88)',[20,290,600,100]);x.strokeStyle='#ffd34d';x.strokeRect(20,290,600,100);x.font='15px monospace';x.fillStyle='#fff';x.textBaseline='top';
+ wrap(dlg[0],570).slice(0,4).forEach((l,i)=>x.fillText(l,34,302+i*20));x.fillStyle='#ffd34d';x.fillText('▶ ESPACIO',520,372)}
+(function loop(){update();draw();requestAnimationFrame(loop)})();
+</script></body></html>
